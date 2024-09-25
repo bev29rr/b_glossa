@@ -16,35 +16,46 @@ fn main() {
 
 fn handle_connection(mut stream:TcpStream) {
     let mut buffer = [0; 1024];
-    stream.read(&mut buffer).unwrap();
-    
-    let get = b"GET / HTTP/1.1\r\n";
-    let response: String;
-    let status_line: &str;
+    let bytes_read = stream.read(&mut buffer).unwrap();
 
-    if buffer.starts_wtih(get) {
-        let contents = read_file(String::from("index.html"));
-        let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-            contents.len(),
-            contents
-        );
+    let binding = String::from_utf8_lossy(&buffer[..bytes_read]);
+    let request_details: Vec<&str> = binding
+        .lines()
+        .collect();
+
+    let mut request_type: Vec<&str> = request_details[0]
+        .split('/')
+        .collect();
+
+    let request_file: Vec<&str> = request_type[1]
+        .split(' ')
+        .map(|s| s.trim())
+        .collect();
+
+    let get = b"GET / HTTP/1.1\r\n";
+
+    let mut response: String = String::new();
+    let mut status_line: &str = "";
+    let mut contents = String::new();
+
+    if buffer.starts_with(b"GET") {
+        if request_file[1] == "HTTP" {
+            if request_file[0] == "" {
+                status_line = "HTTP/1.1 200 OK";
+                contents = read_file(String::from("index.html"));
+            }
+        }
     } else {
-        let status_line = "HTTP/1.1 404 NOT FOUND";
-        let contents = read_file(String::from("index.html"));
-        let response = format!(
-            "{}\r\nContent-Length: {}\r\n\r\n{}",
-            status_line,
-            contents.len(),
-            contents
-        );
+        status_line = "HTTP/1.1 404 NOT FOUND";
+        contents = read_file(String::from("index.html"));
     }
-    let response = format!(
+    response = format!(
         "{}\r\nContent-Length: {}\r\n\r\n{}",
         status_line,
         contents.len(),
         contents
     );
+    println!("{:?}", response);
     stream.write(response.as_bytes()).unwrap();
     stream.flush().unwrap();
 }
