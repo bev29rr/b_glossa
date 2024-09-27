@@ -25,7 +25,7 @@ fn handle_connection(mut stream:TcpStream) {
 
     let mut request_type: Vec<&str> = request_details[0]
         .split('/')
-        .collect();
+        .collect(); 
 
     let request_file: Vec<&str> = request_type[1]
         .split(' ')
