@@ -3,12 +3,36 @@ use std::io::prelude::*;
 use std::fs;
 use std::error::Error;
 
-use crate::utils::{read_file};
+use crate::filesystem::{FileSystem};
 
 pub enum State {
     Off, 
     Idle,
     Processing
+}
+
+pub struct Response {
+    pub status_line: String,
+    pub contents: String,
+}
+
+impl Response {
+    pub fn new() -> Self {
+        let empty_string = String::new();
+        Self {
+            status_line: empty_string.clone(),
+            contents: empty_string
+        }
+    }
+
+    pub fn format_response(&self) -> String {
+        format!(
+            "{}\r\nContent-Length: {}\r\n\r\n{}",
+            self.status_line,
+            self.contents.len(),
+            self.contents
+        )
+    }
 }
 
 pub struct Server {
@@ -33,7 +57,7 @@ impl Server {
     pub fn start(&mut self) {
         let addr = SocketAddr::new(self.ip, self.port);
         self.state = State::Idle;
-        println!("Booting up at: {:?}", addr);
+        println!("Booting up at: \x1b]8;;{:?}\x1b\\{:?}\x1b]8;;\x1b\\", addr, addr);
         let listener = 
             TcpListener::bind(addr).unwrap();
         for stream in listener.incoming() {
@@ -48,35 +72,28 @@ impl Server {
         let connection_info = Self::get_connection_info(&mut stream);
         Self::display_connection(&connection_info);
 
-        let mut response: String = String::new();
-        let mut status_line: &str = "";
-        let mut contents = String::new();
+        let mut response_data = Response::new();
         
         match connection_info {
             Some(conn_info) => {
                 if conn_info.r#type == "GET".to_string() {
                     if conn_info.method == "HTTP" {
-                        if conn_info.file == "" {
-                            status_line = "HTTP/1.1 200 OK";
-                            contents = read_file(String::from("index.html"));
+                        if conn_info.file.as_str() == "" {
+                            response_data.status_line = String::from("HTTP/1.1 200 OK");
+                            response_data.contents = FileSystem::read_file(String::from("index.html"));
                         }
                     }
                 } else {
-                    status_line = "HTTP/1.1 404 NOT FOUND";
-                    contents = read_file(String::from("index.html"));
+                    response_data.status_line = String::from("HTTP/1.1 404 NOT FOUND");
+                    response_data.contents = FileSystem::read_file(String::from("index.html"));
                 }
-                response = format!(
-                    "{}\r\nContent-Length: {}\r\n\r\n{}",
-                    status_line,
-                    contents.len(),
-                    contents
-                );
             },
             None => {
-                status_line = "HTTP/1.1 404 NOT FOUND";
-                contents = String::from("NOT FOUND");
+                response_data.status_line = String::from("HTTP/1.1 404 NOT FOUND");
+                response_data.contents = String::from("NOT FOUND");
             }
         }
+        let response = response_data.format_response();
         //println!("{:?}", response);
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
@@ -107,7 +124,6 @@ impl Server {
         if request_type.len() <= 0 {
             return None;
         }
-        println!("{:?}", request_type);
 
         let request_file: Vec<String> = request_type[1]
             .split(' ')
