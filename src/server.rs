@@ -44,63 +44,113 @@ impl Server {
 
     fn handle_connection(&mut self, mut stream:TcpStream) {
         self.state = State::Processing;
-        let mut buffer = [0; 1024];
-        let bytes_read = stream.read(&mut buffer).unwrap();
-    
-        let binding = String::from_utf8_lossy(&buffer[..bytes_read]);
-        let request_details: Vec<&str> = binding
-            .lines()
-            .collect();
-    
-        let request_type: Vec<&str> = request_details[0]
-            .split('/')
-            .collect(); 
-    
-        let request_file: Vec<&str> = request_type[1]
-            .split(' ')
-            .map(|s| s.trim())
-            .collect();
 
-        println!("{:?}", request_type);
-        //display_connection(stream.local_addr())
-    
+        let connection_info = Self::get_connection_info(&mut stream);
+        Self::display_connection(&connection_info);
+
         let mut response: String = String::new();
         let mut status_line: &str = "";
         let mut contents = String::new();
-    
-        if buffer.starts_with(b"GET") {
-            if request_file[1] == "HTTP" {
-                if request_file[0] == "" {
-                    status_line = "HTTP/1.1 200 OK";
+        
+        match connection_info {
+            Some(conn_info) => {
+                if conn_info.r#type == "GET".to_string() {
+                    if conn_info.method == "HTTP" {
+                        if conn_info.file == "" {
+                            status_line = "HTTP/1.1 200 OK";
+                            contents = read_file(String::from("index.html"));
+                        }
+                    }
+                } else {
+                    status_line = "HTTP/1.1 404 NOT FOUND";
                     contents = read_file(String::from("index.html"));
                 }
+                response = format!(
+                    "{}\r\nContent-Length: {}\r\n\r\n{}",
+                    status_line,
+                    contents.len(),
+                    contents
+                );
+            },
+            None => {
+                status_line = "HTTP/1.1 404 NOT FOUND";
+                contents = String::from("NOT FOUND");
             }
-        } else {
-            status_line = "HTTP/1.1 404 NOT FOUND";
-            contents = read_file(String::from("index.html"));
         }
-        response = format!(
-            "{}\r\nContent-Length: {}\r\n\r\n{}",
-            status_line,
-            contents.len(),
-            contents
-        );
         //println!("{:?}", response);
         stream.write(response.as_bytes()).unwrap();
         stream.flush().unwrap();
         self.state = State::Idle;
     }
 
-    fn display_connection(conn_ip: Result<IpAddr, Box<dyn Error>>, addr: Vec<&str>) {
-        match conn_ip {
-            Ok(ip) => println!("{:?} - ", ip),
-            Err(_) => println!("Unknown - "),
+    fn get_connection_info(stream: &mut TcpStream) -> Option<ConnectionData> {
+        let mut buffer = [0; 1024];
+        let bytes_read = stream.read(&mut buffer).unwrap();
+    
+        let binding = 
+            String::from_utf8_lossy(&buffer[..bytes_read])
+                .to_string();
+        let mut request_details: Vec<String> = binding
+            .lines()
+            .map(|s| s.to_string())
+            .collect();
+        
+        if request_details.len() <= 0 {
+            return None;
+        }
+
+        let mut request_type: Vec<String> = request_details[0]
+            .split('/')
+            .map(|s| s.to_string())
+            .collect(); 
+        
+        if request_type.len() <= 0 {
+            return None;
+        }
+        println!("{:?}", request_type);
+
+        let request_file: Vec<String> = request_type[1]
+            .split(' ')
+            .map(|s| s.trim().to_string())
+            .collect();
+    
+        let this_ip = match stream.local_addr() {
+            Ok(ip) => Some(ip),
+            Err(_) => None
+        };
+
+        let connection_info = ConnectionData {
+            r#type: request_type[0].clone(),
+            file: request_file[0].clone(), 
+            method: request_file[1].clone(),
+            conn_ip: this_ip
+        };
+
+        Some(connection_info)
+    }
+
+    fn display_connection(connection_info: &Option<ConnectionData>) {
+        match connection_info {
+            Some(conn_info) => {
+                println!("{:?}", conn_info.file);
+                let addr = match &conn_info.file.as_str() {
+                    &"" => String::from("/"),
+                    _ => {conn_info.file.clone()}
+                };
+                match conn_info.conn_ip {
+                    Some(ip) => println!("{:?} - {}", ip, addr),
+                    None => println!("Unknown - {}", addr),
+                }
+            },
+            None => println!("Unknown connection"),
         }
     }
 }
 
-pub struct ConnectionData<'a> {
-    pub r#type: &'a str,
-    pub file: &'a str,
-    pub method: &'a str,
+#[derive(Debug, Clone)]
+pub struct ConnectionData {
+    pub r#type: String,
+    pub file: String,
+    pub method: String,
+    pub conn_ip: Option<SocketAddr>
 }
