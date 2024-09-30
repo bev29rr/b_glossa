@@ -1,7 +1,6 @@
 use std::net::{TcpListener, TcpStream, IpAddr, SocketAddr};
 use std::io::prelude::*;
 use std::fs;
-use std::error::Error;
 
 use crate::filesystem::{FileSystem};
 
@@ -11,9 +10,11 @@ pub enum State {
     Processing
 }
 
+#[derive(Debug)]
 pub struct Response {
     pub status_line: String,
     pub contents: String,
+    pub response_data: String
 }
 
 impl Response {
@@ -21,11 +22,32 @@ impl Response {
         let empty_string = String::new();
         Self {
             status_line: empty_string.clone(),
-            contents: empty_string
+            contents: empty_string.clone(),
+            response_data: empty_string
         }
     }
 
-    pub fn format_response(&self) -> String {
+    pub fn format_file(&mut self, string_path: String) {
+        self.status_line = String::from("HTTP/1.1 200 OK");
+        match FileSystem::get_template(string_path) {
+            Some(contents) => {
+                self.contents = contents;
+                self.response_data = Self::format_response(self);
+            },
+            None => { 
+                println!("Call 1");
+                self.response_data = Self::format_error(self);
+            }
+        };
+    }
+
+    pub fn format_error(&mut self) -> String {
+        self.status_line = String::from("HTTP/1.1 404 NOT FOUND");
+        self.contents = String::from("NOT FOUND");
+        Self::format_response(&self)
+    }
+
+    fn format_response(&self) -> String {
         format!(
             "{}\r\nContent-Length: {}\r\n\r\n{}",
             self.status_line,
@@ -72,30 +94,32 @@ impl Server {
         let connection_info = Self::get_connection_info(&mut stream);
         Self::display_connection(&connection_info);
 
-        let mut response_data = Response::new();
+        let mut response = Response::new();
         
+        println!("{:?}", connection_info);
+
         match connection_info {
             Some(conn_info) => {
                 if conn_info.r#type == "GET".to_string() {
                     if conn_info.method == "HTTP" {
                         if conn_info.file.as_str() == "" {
-                            response_data.status_line = String::from("HTTP/1.1 200 OK");
-                            response_data.contents = FileSystem::read_file(String::from("index.html"));
+                            response.format_file(
+                                String::from("index.html")
+                            );
                         }
                     }
                 } else {
-                    response_data.status_line = String::from("HTTP/1.1 404 NOT FOUND");
-                    response_data.contents = FileSystem::read_file(String::from("index.html"));
+                    response.format_error();
+                    println!("Call 2");
                 }
             },
             None => {
-                response_data.status_line = String::from("HTTP/1.1 404 NOT FOUND");
-                response_data.contents = String::from("NOT FOUND");
+                response.format_error();
+                println!("Call 3");
             }
         }
-        let response = response_data.format_response();
-        //println!("{:?}", response);
-        stream.write(response.as_bytes()).unwrap();
+        println!("{:?}", response);
+        stream.write(response.response_data.as_bytes()).unwrap();
         stream.flush().unwrap();
         self.state = State::Idle;
     }
@@ -136,9 +160,9 @@ impl Server {
         };
 
         let connection_info = ConnectionData {
-            r#type: request_type[0].clone(),
-            file: request_file[0].clone(), 
-            method: request_file[1].clone(),
+            r#type: request_type[0].trim().clone().to_string(),
+            file: request_file[0].trim().clone().to_string(),
+            method: request_file[1].trim().clone().to_string(),
             conn_ip: this_ip
         };
 
