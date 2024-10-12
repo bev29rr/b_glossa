@@ -5,7 +5,6 @@ use std::error::Error;
 pub struct FileSystem;
 
 impl FileSystem {
-    
     pub fn get_template(string_path: String) -> Option<String> {
         let path = match Self::check_file_availability(string_path) {
             Some(path) => path,
@@ -20,7 +19,11 @@ impl FileSystem {
     //fn read_dir() -> Vec<String> {}
     
     fn check_file_availability(string_path: String) -> Option<PathBuf> {
-        let path = PathBuf::from(&string_path);
+        let current_dir = env::current_dir();
+        let path: PathBuf = match current_dir {
+            Ok(dir) => dir.join("public").join(&string_path),
+            Err(_) => {return None;},
+        };
         if path.exists() {
             return Some(path);
         } else {

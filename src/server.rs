@@ -79,7 +79,7 @@ impl Server {
     pub fn start(&mut self) {
         let addr = SocketAddr::new(self.ip, self.port);
         self.state = State::Idle;
-        println!("Booting up at: \x1b]8;;{:?}\x1b\\{:?}\x1b]8;;\x1b\\", addr, addr);
+        println!("Booting up at: \x1b]8;;http://{:?}\x1b\\{:?}\x1b]8;;\x1b\\", addr, addr);
         let listener = 
             TcpListener::bind(addr).unwrap();
         for stream in listener.incoming() {
@@ -95,8 +95,6 @@ impl Server {
         Self::display_connection(&connection_info);
 
         let mut response = Response::new();
-        
-        println!("{:?}", connection_info);
 
         match connection_info {
             Some(conn_info) => {
@@ -105,6 +103,11 @@ impl Server {
                         if conn_info.file.as_str() == "" {
                             response.format_file(
                                 String::from("index.html")
+                            );
+                        }
+                        else {
+                            response.format_file(
+                                conn_info.file
                             );
                         }
                     }
@@ -118,7 +121,6 @@ impl Server {
                 println!("Call 3");
             }
         }
-        println!("{:?}", response);
         stream.write(response.response_data.as_bytes()).unwrap();
         stream.flush().unwrap();
         self.state = State::Idle;
