@@ -1,16 +1,18 @@
 use crate::filesystem::{FileSystem};
 
 #[derive(Debug)]
-pub struct Response {
+pub struct Response<'a> {
+    filesystem: &'a FileSystem,
     pub status_line: String,
     pub contents: String,
     pub response_data: String
 }
 
-impl Response {
-    pub fn new() -> Self {
+impl<'a> Response<'a> {
+    pub fn new(filesystem: &'a FileSystem) -> Self {
         let empty_string = String::new();
         Self {
+            filesystem: filesystem,
             status_line: empty_string.clone(),
             contents: empty_string.clone(),
             response_data: empty_string
@@ -19,7 +21,7 @@ impl Response {
 
     pub fn format_file(&mut self, string_path: String) {
         self.status_line = String::from("HTTP/1.1 200 OK");
-        match FileSystem::get_template(string_path) {
+        match self.filesystem.get_template(string_path) {
             Some(contents) => {
                 self.contents = contents;
                 self.response_data = Self::format_response(self);

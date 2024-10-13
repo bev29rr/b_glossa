@@ -1,9 +1,9 @@
 use std::net::{TcpListener, TcpStream, IpAddr, SocketAddr};
 use std::io::prelude::*;
-use std::fs;
 use local_ip_address::local_ip;
 
 use crate::response::{Response};
+use crate::filesystem::{FileSystem};
 
 pub enum State {
     Off, 
@@ -12,6 +12,7 @@ pub enum State {
 }
 
 pub struct Server {
+    filesystem: FileSystem,
     pub ip: IpAddr,
     pub port: u16,
     pub state: State,
@@ -19,11 +20,13 @@ pub struct Server {
 
 impl Server {
     pub fn new(ip: IpAddr, port_raw: Option<u16>) -> Self {
+        let filesystem = FileSystem::init();
         let port = match port_raw {
             Some(num) => num,
             None => 7878
         };
         Self {
+            filesystem,
             ip,
             port,
             state: State::Off
@@ -57,7 +60,7 @@ impl Server {
 
         let connection_info = Self::get_connection_info(&mut stream);
 
-        let mut response = Response::new();
+        let mut response = Response::new(&self.filesystem);
 
         match connection_info.clone() {
             Some(conn_info) => {
@@ -126,9 +129,9 @@ impl Server {
         };
 
         let connection_info = ConnectionData {
-            r#type: request_type[0].trim().clone().to_string(),
-            file: request_file[0].trim().clone().to_string(),
-            method: request_file[1].trim().clone().to_string(),
+            r#type: request_type[0].trim().to_string(),
+            file: request_file[0].trim().to_string(),
+            method: request_file[1].trim().to_string(),
             conn_ip: this_ip
         };
 
