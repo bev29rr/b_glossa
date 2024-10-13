@@ -1,60 +1,14 @@
 use std::net::{TcpListener, TcpStream, IpAddr, SocketAddr};
 use std::io::prelude::*;
 use std::fs;
+use local_ip_address::local_ip;
 
-use crate::filesystem::{FileSystem};
+use crate::response::{Response};
 
 pub enum State {
     Off, 
     Idle,
     Processing
-}
-
-#[derive(Debug)]
-pub struct Response {
-    pub status_line: String,
-    pub contents: String,
-    pub response_data: String
-}
-
-impl Response {
-    pub fn new() -> Self {
-        let empty_string = String::new();
-        Self {
-            status_line: empty_string.clone(),
-            contents: empty_string.clone(),
-            response_data: empty_string
-        }
-    }
-
-    pub fn format_file(&mut self, string_path: String) {
-        self.status_line = String::from("HTTP/1.1 200 OK");
-        match FileSystem::get_template(string_path) {
-            Some(contents) => {
-                self.contents = contents;
-                self.response_data = Self::format_response(self);
-            },
-            None => { 
-                println!("Call 1");
-                self.response_data = Self::format_error(self);
-            }
-        };
-    }
-
-    pub fn format_error(&mut self) -> String {
-        self.status_line = String::from("HTTP/1.1 404 NOT FOUND");
-        self.contents = String::from("NOT FOUND");
-        Self::format_response(&self)
-    }
-
-    fn format_response(&self) -> String {
-        format!(
-            "{}\r\nContent-Length: {}\r\n\r\n{}",
-            self.status_line,
-            self.contents.len(),
-            self.contents
-        )
-    }
 }
 
 pub struct Server {
@@ -76,6 +30,16 @@ impl Server {
         }
     }
 
+    pub fn from_presets() -> Self {
+        let ip_raw = local_ip();
+        let ip = match ip_raw {
+            Ok(ip) => ip,
+            Err(_) => panic!("Failed to load IP Address!"),
+        };
+        let port = Some(7878 as u16);
+        Self::new(ip, port)
+    }
+
     pub fn start(&mut self) {
         let addr = SocketAddr::new(self.ip, self.port);
         self.state = State::Idle;
@@ -92,11 +56,10 @@ impl Server {
         self.state = State::Processing;
 
         let connection_info = Self::get_connection_info(&mut stream);
-        Self::display_connection(&connection_info);
 
         let mut response = Response::new();
 
-        match connection_info {
+        match connection_info.clone() {
             Some(conn_info) => {
                 if conn_info.r#type == "GET".to_string() {
                     if conn_info.method == "HTTP" {
@@ -113,14 +76,15 @@ impl Server {
                     }
                 } else {
                     response.format_error();
-                    println!("Call 2");
                 }
             },
             None => {
                 response.format_error();
-                println!("Call 3");
             }
         }
+
+        Self::display_connection(&connection_info, &response.status_line);
+
         stream.write(response.response_data.as_bytes()).unwrap();
         stream.flush().unwrap();
         self.state = State::Idle;
@@ -171,20 +135,25 @@ impl Server {
         Some(connection_info)
     }
 
-    fn display_connection(connection_info: &Option<ConnectionData>) {
+    fn display_connection(connection_info: &Option<ConnectionData>, status_line: &String) {
+        let error_404 = String::from("HTTP/1.1 404 NOT FOUND");
+        let conn_color = if status_line == &error_404 {
+            "\x1b[33m"
+        } else { 
+            "\x1b[32m"
+        };
         match connection_info {
             Some(conn_info) => {
-                println!("{:?}", conn_info.file);
                 let addr = match &conn_info.file.as_str() {
                     &"" => String::from("/"),
                     _ => {conn_info.file.clone()}
                 };
                 match conn_info.conn_ip {
-                    Some(ip) => println!("{:?} - {}", ip, addr),
-                    None => println!("Unknown - {}", addr),
+                    Some(ip) => println!("{}{:?} - {}\x1b[0m", conn_color, ip, addr),
+                    None => println!("\x1b[31mUnknown - {}\x1b[0m", addr),
                 }
             },
-            None => println!("Unknown connection"),
+            None => println!("\x1b[31mUnknown connection\x1b[0m"),
         }
     }
 }

@@ -15,8 +15,6 @@ impl FileSystem {
             Err(_) => None
         }
     }
-
-    //fn read_dir() -> Vec<String> {}
     
     fn check_file_availability(string_path: String) -> Option<PathBuf> {
         let current_dir = env::current_dir();
